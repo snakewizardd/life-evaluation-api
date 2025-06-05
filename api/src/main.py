@@ -194,7 +194,7 @@ async def generate_final_roast(request: FinalAnalysisRequest):
 
 Create an epic final analysis. Return as JSON:
 
-{
+{{
   "title": "The [Something] Report 🎭",
   "summary": "2-3 sentences about their real situation",
   "insights": [
@@ -202,7 +202,7 @@ Create an epic final analysis. Return as JSON:
     "Point out contradictions and blind spots",
     "Be witty but constructive"
   ]
-}"""
+}}"""
 
         messages = [
             {"role": "system", "content": "You're a brutally honest coach. Return only valid JSON."},
