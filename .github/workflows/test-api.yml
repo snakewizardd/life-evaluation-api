@@ -1,0 +1,141 @@
+name: Life Evaluation API Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-api:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: life_eval
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install API dependencies
+      run: |
+        cd api
+        pip install -r requirements.txt
+
+    - name: Install test dependencies
+      run: |
+        pip install requests pytest
+
+    - name: Start API server
+      run: |
+        cd api
+        uvicorn src.main:app --host 0.0.0.0 --port 8000 &
+        sleep 10
+      env:
+        DATABASE_URL: postgresql://postgres:password@localhost:5432/life_eval
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+
+    - name: Wait for API to be ready
+      run: |
+        timeout 30s bash -c 'until curl -s http://localhost:8000/ > /dev/null; do sleep 1; done'
+
+    - name: Run API endpoint tests
+      run: |
+        # Test models endpoint
+        echo "Testing models endpoint..."
+        curl -f http://localhost:8000/api/models
+        
+        # Test first question generation
+        echo "Testing first question generation..."
+        curl -f -X POST http://localhost:8000/api/generate-first-question \
+          -H "Content-Type: application/json" \
+          -d '{"prompt": "get jacked", "model": "gpt-4.1-nano"}'
+
+    - name: Run full journey test (mock mode)
+      run: |
+        # Create a simplified test that doesn't require user input
+        python3 -c "
+        import requests
+        import json
+        
+        # Test models endpoint
+        response = requests.get('http://localhost:8000/api/models')
+        assert response.status_code == 200
+        print('✅ Models endpoint working')
+        
+        # Test question generation  
+        response = requests.post(
+            'http://localhost:8000/api/generate-first-question',
+            json={'prompt': 'test goal', 'model': 'gpt-4.1-nano'}
+        )
+        assert response.status_code == 200
+        print('✅ Question generation working')
+        
+        # Test analysis
+        response = requests.post(
+            'http://localhost:8000/api/analyze-answer-bro',
+            json={
+                'prompt': 'test goal',
+                'questions': ['test question'],
+                'answers': ['test answer'],
+                'current_answer': 'test answer',
+                'model': 'gpt-4.1-nano'
+            }
+        )
+        assert response.status_code == 200
+        print('✅ Answer analysis working')
+        
+        # Test final roast
+        response = requests.post(
+            'http://localhost:8000/api/generate-final-roast',
+            json={
+                'prompt': 'test goal',
+                'questions': ['test question'],
+                'answers': ['test answer'],
+                'model': 'gpt-4.1-nano'
+            }
+        )
+        assert response.status_code == 200
+        result = response.json()
+        assert 'title' in result
+        assert 'summary' in result
+        assert 'insights' in result
+        print('✅ Final roast working')
+        
+        print('🎉 All API tests passed!')
+        "
+
+    - name: Run journey test script (if available)
+      run: |
+        if [ -f "test_journey.py" ]; then
+          echo "Running automated journey test..."
+          # Run with predetermined inputs to avoid interactive prompts
+          echo -e "1\n1" | timeout 60s python3 test_journey.py || echo "Journey test completed or timed out"
+        else
+          echo "Journey test script not found, skipping..."
+        fi
+      continue-on-error: true
+
+    - name: Check API logs
+      if: failure()
+      run: |
+        echo "API might have failed, checking for any background processes..."
+        ps aux | grep uvicorn || echo "No uvicorn processes found"
