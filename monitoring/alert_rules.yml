@@ -1,0 +1,214 @@
+# Alert Rules for Life Evaluation API
+groups:
+  - name: life_eval_api_alerts
+    rules:
+      # API Health Alerts
+      - alert: APIDown
+        expr: up{job="life-eval-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Life Evaluation API is down"
+          description: "The Life Evaluation API has been down for more than 1 minute."
+
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API response time"
+          description: "95th percentile response time is {{ $value }}s"
+
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value }} errors per second"
+
+      # AI Quality Alerts
+      - alert: AIResponseQualityDegraded
+        expr: ai_response_quality_score < 0.7
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI response quality degraded"
+          description: "AI response quality score is {{ $value }}, below threshold of 0.7"
+
+      - alert: OpenAIAPITimeout
+        expr: openai_api_timeout_count > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Multiple OpenAI API timeouts"
+          description: "{{ $value }} OpenAI API timeouts in the last 5 minutes"
+
+      - alert: AIHallucinationDetected
+        expr: ai_hallucination_score > 0.8
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Potential AI hallucination detected"
+          description: "AI hallucination score is {{ $value }}, indicating potential false information"
+
+      # System Resource Alerts
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value | humanizePercentage }}"
+
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value }}%"
+
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) < 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Low disk space"
+          description: "Disk space is {{ $value | humanizePercentage }} available"
+
+      # Database Alerts
+      - alert: DatabaseConnectionsHigh
+        expr: pg_stat_database_numbackends > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High database connections"
+          description: "Database has {{ $value }} active connections"
+
+      - alert: DatabaseDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database is down"
+          description: "PostgreSQL database has been down for more than 1 minute"
+
+      # Frontend Performance Alerts
+      - alert: FrontendDown
+        expr: up{job="life-eval-frontend"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Frontend is down"
+          description: "Frontend application has been down for more than 2 minutes"
+
+      - alert: VisualEffectsPerformanceDegraded
+        expr: visual_effects_frame_rate < 30
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Visual effects performance degraded"
+          description: "Visual effects frame rate is {{ $value }}fps, below 30fps threshold"
+
+      - alert: HighPageLoadTime
+        expr: frontend_page_load_time > 3000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High page load time"
+          description: "Page load time is {{ $value }}ms, above 3 second threshold"
+
+      # User Experience Alerts
+      - alert: HighUserDropoffRate
+        expr: user_journey_completion_rate < 0.6
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High user dropoff rate"
+          description: "User journey completion rate is {{ $value }}, below 60%"
+
+      - alert: QuestionGenerationFailureRate
+        expr: rate(question_generation_failures[5m]) > 0.05
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High question generation failure rate"
+          description: "Question generation failing at {{ $value }} per second"
+
+      # Security Alerts
+      - alert: UnusualTrafficPattern
+        expr: rate(http_requests_total[1m]) > rate(http_requests_total[1h]) * 5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Unusual traffic pattern detected"
+          description: "Traffic rate is 5x higher than hourly average"
+
+      - alert: HighFailedAuthAttempts
+        expr: rate(auth_failures_total[5m]) > 10
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High failed authentication attempts"
+          description: "{{ $value }} failed auth attempts per second"
+
+  - name: chaos_engineering_alerts
+    rules:
+      # Chaos Testing Alerts
+      - alert: ChaosTestFailure
+        expr: chaos_test_success_rate < 0.7
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Chaos test failure"
+          description: "Chaos test success rate is {{ $value }}, system resilience compromised"
+
+      - alert: ResilienceScoreLow
+        expr: system_resilience_score < 7
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low system resilience score"
+          description: "System resilience score is {{ $value }}/10"
+
+  - name: business_metrics_alerts
+    rules:
+      # Business KPI Alerts
+      - alert: LowUserEngagement
+        expr: daily_active_users < 100
+        for: 1d
+        labels:
+          severity: info
+        annotations:
+          summary: "Low user engagement"
+          description: "Daily active users is {{ $value }}, below target of 100"
+
+      - alert: HighAbandonmentRate
+        expr: session_abandonment_rate > 0.4
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High session abandonment rate"
+          description: "Session abandonment rate is {{ $value }}, above 40% threshold"
